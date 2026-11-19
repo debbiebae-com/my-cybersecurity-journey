@@ -1,0 +1,105 @@
+# ============================================================================
+# local.rules — Custom Intrusion Detection Rules for the NIDS Project
+# ============================================================================
+# SID range: 1000001 - 1000099 (reserved for this project)
+# Severity:  1 = critical, 2 = high, 3 = medium, 4 = low
+#
+# Load with:  suricata -S suricata/rules/local.rules
+# Validate:   suricata -T -c suricata/suricata.yaml -S suricata/rules/local.rules
+# ============================================================================
+
+# ----------------------------------------------------------------------------
+# 1. PORT SCANNING
+# ----------------------------------------------------------------------------
+
+# TCP SYN scan — many SYNs from one host to different ports
+alert tcp any any -> $HOME_NET any (msg:"NIDS Port Scan: TCP SYN scan detected"; flow:to_server,established; flags:S; threshold:type limit, track by_src, count 10, seconds 10; classtype:attempted-recon; severity:2; sid:1000001; rev:1;)
+
+# SYN scan with no ACK response pattern (stealth scan indicator)
+alert tcp any any -> $HOME_NET any (msg:"NIDS Port Scan: Possible stealth SYN scan"; flags:S; flow:to_server; threshold:type limit, track by_src, count 20, seconds 30; classtype:attempted-recon; severity:3; sid:1000002; rev:1;)
+
+# UDP port scan — many UDP packets to different ports
+alert udp any any -> $HOME_NET any (msg:"NIDS Port Scan: UDP scan detected"; flow:to_server; threshold:type limit, track by_src, count 15, seconds 10; classtype:attempted-recon; severity:2; sid:1000003; rev:1;)
+
+# Nmap NSE / version detection probe
+alert tcp any any -> $HOME_NET any (msg:"NIDS Recon: Nmap version detection probe"; content:"|00 00 00 00 00 00 00 00|"; depth:8; classtype:attempted-recon; severity:3; sid:1000004; rev:1;)
+
+# ----------------------------------------------------------------------------
+# 2. SUSPICIOUS CONNECTIONS
+# ----------------------------------------------------------------------------
+
+# Telnet connection attempt (clear-text protocol — suspicious in modern nets)
+alert tcp any any -> $HOME_NET 23 (msg:"NIDS Suspicious: Telnet connection attempt"; flow:to_server,established; classtype:policy-violation; severity:3; sid:1000005; rev:1;)
+
+# SMB connection attempt (common lateral-movement / ransomware vector)
+alert tcp any any -> $HOME_NET 445 (msg:"NIDS Suspicious: SMB connection attempt"; flow:to_server,established; classtype:policy-violation; severity:3; sid:1000006; rev:1;)
+
+# RDP connection attempt
+alert tcp any any -> $HOME_NET 3389 (msg:"NIDS Suspicious: RDP connection attempt"; flow:to_server,established; classtype:policy-violation; severity:3; sid:1000007; rev:1;)
+
+# NetBIOS / LLMNR probing
+alert udp any any -> $HOME_NET 137 (msg:"NIDS Suspicious: NetBIOS name query"; classtype:attempted-recon; severity:4; sid:1000008; rev:1;)
+
+# ----------------------------------------------------------------------------
+# 3. ICMP SCANNING
+# ----------------------------------------------------------------------------
+
+# ICMP echo-request sweep (ping sweep / host discovery)
+alert icmp any any -> $HOME_NET any (msg:"NIDS ICMP Scan: Echo request sweep detected"; itype:8; threshold:type limit, track by_src, count 10, seconds 10; classtype:attempted-recon; severity:2; sid:1000010; rev:1;)
+
+# ICMP flood
+alert icmp any any -> $HOME_NET any (msg:"NIDS ICMP Scan: ICMP flood detected"; itype:8; threshold:type limit, track by_src, count 50, seconds 5; classtype:dos-attack; severity:1; sid:1000011; rev:1;)
+
+# ICMP destination-unreachable scan (UDP scan responses / host discovery)
+alert icmp any any -> $HOME_NET any (msg:"NIDS ICMP Scan: Destination unreachable probing"; itype:3; threshold:type limit, track by_src, count 10, seconds 10; classtype:attempted-recon; severity:3; sid:1000012; rev:1;)
+
+# ICMP tunneling indicator (large ICMP payloads)
+alert icmp any any -> $HOME_NET any (msg:"NIDS ICMP Scan: Large ICMP payload (possible tunneling)"; itype:8; dsize:>200; classtype:policy-violation; severity:2; sid:1000013; rev:1;)
+
+# ----------------------------------------------------------------------------
+# 4. BRUTE-FORCE INDICATORS
+# ----------------------------------------------------------------------------
+
+# Repeated SSH authentication attempts
+alert tcp any any -> $HOME_NET 22 (msg:"NIDS Brute Force: Repeated SSH authentication attempts"; flow:to_server,established; content:"SSH-"; threshold:type limit, track by_src, count 5, seconds 60; classtype:attempted-admin; severity:1; sid:1000020; rev:1;)
+
+# Repeated FTP authentication attempts
+alert tcp any any -> $HOME_NET 21 (msg:"NIDS Brute Force: Repeated FTP authentication attempts"; flow:to_server,established; content:"USER "; threshold:type limit, track by_src, count 5, seconds 60; classtype:attempted-admin; severity:1; sid:1000021; rev:1;)
+
+# Repeated HTTP basic-auth failures (401 responses)
+alert tcp any any -> $HOME_NET 80 (msg:"NIDS Brute Force: Repeated HTTP 401 responses"; flow:to_client,established; content:"401 Unauthorized"; threshold:type limit, track by_src, count 10, seconds 60; classtype:attempted-admin; severity:2; sid:1000022; rev:1;)
+
+# ----------------------------------------------------------------------------
+# 5. MALICIOUS TRAFFIC / KNOWN SIGNATURES
+# ----------------------------------------------------------------------------
+
+# sqlmap user agent
+alert http any any -> $HOME_NET any (msg:"NIDS Malicious: sqlmap user agent detected"; http.user_agent; content:"sqlmap"; nocase; classtype:trojan-activity; severity:1; sid:1000030; rev:1;)
+
+# Nikto user agent
+alert http any any -> $HOME_NET any (msg:"NIDS Malicious: Nikto scanner user agent detected"; http.user_agent; content:"Nikto"; nocase; classtype:trojan-activity; severity:1; sid:1000031; rev:1;)
+
+# Metasploit user agent
+alert http any any -> $HOME_NET any (msg:"NIDS Malicious: Metasploit user agent detected"; http.user_agent; content:"Metasploit"; nocase; classtype:trojan-activity; severity:1; sid:1000032; rev:1;)
+
+# SQL injection attempt in HTTP URI
+alert http any any -> $HOME_NET any (msg:"NIDS Malicious: SQL injection attempt in URI"; http.uri; content:"UNION"; nocase; content:"SELECT"; nocase; distance:0; within:30; classtype:web-application-attack; severity:1; sid:1000033; rev:1;)
+
+# Directory traversal attempt
+alert http any any -> $HOME_NET any (msg:"NIDS Malicious: Directory traversal attempt"; http.uri; content:"../"; classtype:web-application-attack; severity:2; sid:1000034; rev:1;)
+
+# DNS tunneling indicator (very long DNS query)
+alert dns any any -> $HOME_NET 53 (msg:"NIDS Malicious: Possible DNS tunneling (long query)"; dns.query; content:"|00|"; depth:1; pcre:"/^.{50,}$/"; classtype:trojan-activity; severity:2; sid:1000035; rev:1;)
+
+# ----------------------------------------------------------------------------
+# 6. SUSPICIOUS NETWORK ACTIVITY
+# ----------------------------------------------------------------------------
+
+# Large outbound transfer (possible exfiltration indicator)
+alert tcp $HOME_NET any -> any any (msg:"NIDS Suspicious: Large outbound data transfer"; flow:established,to_client; dsize:>100000; classtype:policy-violation; severity:3; sid:1000040; rev:1;)
+
+# Multiple failed TCP connections from one host (scanning / brute force)
+alert tcp any any -> $HOME_NET any (msg:"NIDS Suspicious: Many failed TCP connections from single host"; flags:S; flow:to_server; threshold:type limit, track by_src, count 30, seconds 60; classtype:attempted-recon; severity:2; sid:1000041; rev:1;)
+
+# ICMP echo request to broadcast address (smurf-style probing)
+alert icmp any any -> 255.255.255.255 any (msg:"NIDS Suspicious: ICMP to broadcast address"; itype:8; classtype:attempted-recon; severity:2; sid:1000042; rev:1;)

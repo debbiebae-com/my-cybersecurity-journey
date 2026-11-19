@@ -1,0 +1,119 @@
+# ============================================================================
+# suricata.yaml — Configuration for the NIDS Project
+# ============================================================================
+# Run:  sudo suricata -c suricata/suricata.yaml -S suricata/rules/local.rules -l logs/
+# Test: sudo suricata -T -c suricata/suricata.yaml -S suricata/rules/local.rules
+#
+# IMPORTANT: set `default-interface` below to YOUR network interface.
+# Find it with:  ip -br a
+# ============================================================================
+
+%YAML 1.1
+---
+vars:
+  address-groups:
+    HOME_NET: "[192.168.0.0/16,10.0.0.0/8,172.16.0.0/12]"
+    EXTERNAL_NET: "!$HOME_NET"
+    HTTP_SERVERS: "$HOME_NET"
+    SMTP_SERVERS: "$HOME_NET"
+    SQL_SERVERS: "$HOME_NET"
+    DNS_SERVERS: "$HOME_NET"
+    TELNET_SERVERS: "$HOME_NET"
+    AIM_SERVERS: "$HOME_NET"
+    DC_SERVERS: "$HOME_NET"
+    DNP3_SERVERS: "$HOME_NET"
+    DNP3_CLIENTS: "$HOME_NET"
+    MODBUS_CLIENTS: "$HOME_NET"
+    MODBUS_SERVERS: "$HOME_NET"
+    ENIP_CLIENTS: "$HOME_NET"
+    ENIP_SERVERS: "$HOME_NET"
+  port-groups:
+    HTTP_PORTS: "80"
+    SHELLCODE_PORTS: "!23"
+    ORACLE_PORTS: "1521"
+    SSH_PORTS: "22"
+    DNP3_PORTS: "20000"
+    MODBUS_PORTS: "502"
+    ENIP_PORTS: "44818"
+    FILE_DATA_PORTS: "80"
+
+default-rule-path: /etc/suricata/rules
+
+rule-files:
+  - local.rules
+
+# --- Network interface to monitor (CHANGE THIS) -----------------------------
+default-interface: eth0
+
+# --- Outputs ----------------------------------------------------------------
+outputs:
+  # Structured JSON log — the primary input for src/alert_processor.py
+  - eve-log:
+      enabled: yes
+      file: eve.json
+      types:
+        - alert:
+            extended: yes
+            custom: []
+        - flow:
+            extended: yes
+        - stats:
+            extended: yes
+            totals: yes
+            threads: no
+        - anomaly:
+            enabled: yes
+            types:
+              - logging
+
+  # Human-readable alert log
+  - fast:
+      enabled: yes
+      filename: fast.log
+      extended: yes
+      custom: []
+
+  # Console output (useful while testing)
+  - console:
+      enabled: no
+
+# --- Logging ----------------------------------------------------------------
+logging:
+  default-log-level: info
+  outputs:
+    - console:
+        enabled: yes
+    - file:
+        enabled: yes
+        filename: /var/log/suricata/suricata.log
+
+# --- Stream / detection basics ---------------------------------------------
+stream:
+  memcap: 256mb
+  depth: 1mb
+  checksum-validation: yes
+
+# --- App-layer protocols (HTTP/DNS/FTP/TLS inspection for rules) -----------
+app-layer:
+  protocols:
+    http:
+      enabled: yes
+    dns:
+      enabled: yes
+    ftp:
+      enabled: yes
+    tls:
+      enabled: yes
+    ssh:
+      enabled: yes
+
+# --- Classification & reference config --------------------------------------
+classification-file: /etc/suricata/classification.config
+reference-config-file: /etc/suricata/reference.config
+
+# --- Default drop action (IDS mode: alert only — safe default) --------------
+# Set to "drop" only if you intentionally run Suricata as an IPS.
+default-drop-action: alert
+
+# --- Run mode ----------------------------------------------------------------
+runmode: single

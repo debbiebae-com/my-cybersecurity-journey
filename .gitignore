@@ -1,0 +1,21 @@
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.venv/
+venv/
+
+# Generated NIDS data (keep the sample + whitelist template)
+data/incidents.json
+data/incidents.db
+data/blocked_ips.json
+!data/.gitkeep
+
+# Suricata runtime logs
+logs/
+*.log
+
+# Streamlit / OS
+.streamlit/secrets.toml
+.DS_Store
+Thumbs.db
