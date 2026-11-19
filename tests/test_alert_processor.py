@@ -95,3 +95,32 @@ def test_whitelist(tmp_path):
     whitelist.write_text("127.0.0.1\n")
     assert is_whitelisted("127.0.0.1", whitelist)
     assert not is_whitelisted("192.168.56.102", whitelist)
+
+
+def test_suricata_rules_compatibility():
+    """Regression test for Suricata 7.0.3 rule syntax compatibility."""
+    import re
+    rules_path = Path("suricata/rules/local.rules")
+    rules = [
+        line.strip()
+        for line in rules_path.read_text().splitlines()
+        if line.strip() and not line.strip().startswith("#")
+    ]
+    assert len(rules) == 24
+    for rule in rules:
+        assert "severity:" not in rule, f"Unsupported keyword 'severity:' in: {rule}"
+        assert "classtype:dos-attack;" not in rule, f"Unsupported classtype 'dos-attack' in: {rule}"
+        assert "priority:" in rule, f"Missing 'priority:' in: {rule}"
+        assert "sid:" in rule and "msg:" in rule and "rev:" in rule
+        assert rule.count("(") == rule.count(")") and rule.endswith(")")
+        m = re.search(r"dsize:[<>]?(\d+)", rule)
+        if m:
+            assert int(m.group(1)) <= 65535, f"dsize exceeds max packet size in: {rule}"
+
+
+def test_setup_script_uses_venv_and_fails_on_error():
+    """Regression test: setup.sh must use .venv and exit non-zero on failures."""
+    setup_text = Path("scripts/setup.sh").read_text()
+    assert ".venv/bin/pip install -r requirements.txt" in setup_text
+    assert "suricata -T" in setup_text
+    assert "exit 1" in setup_text
