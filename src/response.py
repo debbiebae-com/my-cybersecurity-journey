@@ -55,23 +55,23 @@ def is_whitelisted(ip: str, path: Path = WHITELIST_FILE) -> bool:
     return ip in load_whitelist(path)
 
 
-def _load_blocked() -> list[dict]:
-    if not BLOCKED_FILE.exists():
+def _load_blocked(blocked_file: Path = BLOCKED_FILE) -> list[dict]:
+    if not blocked_file.exists():
         return []
     try:
-        return json.loads(BLOCKED_FILE.read_text())
+        return json.loads(blocked_file.read_text())
     except json.JSONDecodeError:
         return []
 
 
-def _save_blocked(records: list[dict]) -> None:
-    DATA_DIR.mkdir(parents=True, exist_ok=True)
-    BLOCKED_FILE.write_text(json.dumps(records, indent=2))
+def _save_blocked(records: list[dict], blocked_file: Path = BLOCKED_FILE) -> None:
+    blocked_file.parent.mkdir(parents=True, exist_ok=True)
+    blocked_file.write_text(json.dumps(records, indent=2))
 
 
-def list_blocked() -> list[dict]:
+def list_blocked(blocked_file: Path = BLOCKED_FILE) -> list[dict]:
     """Return the current block-list audit records."""
-    return _load_blocked()
+    return _load_blocked(blocked_file)
 
 
 def _run_iptables(args: list[str]) -> tuple[bool, str]:
@@ -108,7 +108,7 @@ def block_ip(ip: str, dry_run: bool = False,
         return {"ip": ip, "blocked": False, "dry_run": dry_run,
                 "reason": reason, "message": "IP is whitelisted — not blocked"}
 
-    records = _load_blocked()
+    records = _load_blocked(blocked_file)
     if any(r.get("ip") == ip for r in records):
         return {"ip": ip, "blocked": False, "dry_run": dry_run,
                 "reason": reason, "message": "IP already blocked"}
@@ -129,19 +129,7 @@ def block_ip(ip: str, dry_run: bool = False,
         "message": message,
     }
     records.append(record)
-    # Honour a custom blocked_file for tests
-    if blocked_file != BLOCKED_FILE:
-        blocked_file.parent.mkdir(parents=True, exist_ok=True)
-        existing = []
-        if blocked_file.exists():
-            try:
-                existing = json.loads(blocked_file.read_text())
-            except json.JSONDecodeError:
-                existing = []
-        existing.append(record)
-        blocked_file.write_text(json.dumps(existing, indent=2))
-    else:
-        _save_blocked(records)
+    _save_blocked(records, blocked_file)
 
     return {"ip": ip, "blocked": success, "dry_run": dry_run,
             "reason": reason, "message": message}
