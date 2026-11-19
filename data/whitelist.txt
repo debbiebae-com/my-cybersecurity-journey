@@ -1,0 +1,3 @@
+# IPs that must NEVER be auto-blocked (one per line)
+127.0.0.1
+::1
